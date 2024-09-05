@@ -1,0 +1,49 @@
+FROM php:8.3.10-fpm-bookworm
+
+ARG USER_ID
+ARG GROUP_ID
+
+ENV USER_ID=$USER_ID
+ENV GROUP_ID=$GROUP_ID
+ENV USER_ID=${USER_ID:-1001}
+ENV GROUP_ID=${GROUP_ID:-1001}
+
+ENV NVM_DIR=/usr/local/nvm
+ENV NODE_VERSION=20.16.0
+
+# Install system dependencies
+RUN apt update -y && \
+    apt install -y libbz2-dev zlib1g-dev libpng-dev libxml2-dev libxslt-dev libzip-dev libonig-dev zip git && \ 
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir /var/run/supervisord && \
+    chown -R www-data:www-data /var/www
+
+# Install and prepare Node.js using NVM
+RUN mkdir -p $NVM_DIR && \
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
+    . $NVM_DIR/nvm.sh && \
+    nvm install $NODE_VERSION && \
+    nvm alias default $NODE_VERSION && \
+    nvm use default
+
+ENV PATH=$NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
+
+# Install PHP extensions
+RUN pecl install redis xdebug && \
+    docker-php-ext-install -j$(nproc) mbstring exif pcntl bcmath gd zip && \
+    docker-php-ext-enable redis xdebug && \
+    echo "xdebug.mode=develop,debug,coverage" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini && \
+    echo "xdebug.client_host=host.docker.internal" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+# Install Composer
+COPY --from=composer:2.7.7 /usr/bin/composer /usr/bin/composer
+
+# Copy base configs
+COPY configs/php.ini /usr/local/etc/php/conf.d/99-iut.ini
+
+# Change default path
+WORKDIR /var/www/app
+
+# Export Vite.js server port
+EXPOSE 5173
