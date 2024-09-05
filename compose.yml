@@ -40,4 +40,5 @@ services:
 networks:
   laravel:
     name: laravel
-    driver: bridge
+    driver: bridge   
+    
